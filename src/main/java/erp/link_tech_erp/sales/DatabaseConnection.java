@@ -68,45 +68,46 @@ public class DatabaseConnection {
         }
 
         throw new IllegalStateException(
-            "Missing Supabase DB password. Set SUPABASE_DB_PASSWORD in environment or .env.local."
+            "Missing Supabase DB password. Set SUPABASE_DB_PASSWORD in environment, .env.local, or .env."
         );
     }
 
     private static Map<String, String> loadEnvFileValues() {
-        Path envPath = Paths.get(".env.local");
-        if (!Files.exists(envPath)) {
-            return Collections.emptyMap();
-        }
-
         Map<String, String> values = new HashMap<>();
-        try {
-            List<String> lines = Files.readAllLines(envPath);
-            for (String rawLine : lines) {
-                if (rawLine == null) {
-                    continue;
-                }
-
-                String line = rawLine.trim();
-                if (line.isEmpty() || line.startsWith("#")) {
-                    continue;
-                }
-
-                int separator = line.indexOf('=');
-                if (separator <= 0) {
-                    continue;
-                }
-
-                String key = line.substring(0, separator).trim();
-                String value = line.substring(separator + 1).trim();
-                if (!key.isEmpty()) {
-                    values.put(key, value);
-                }
+        for (Path envPath : List.of(Paths.get(".env"), Paths.get(".env.local"))) {
+            if (!Files.exists(envPath)) {
+                continue;
             }
-        } catch (IOException ignored) {
-            return Collections.emptyMap();
+
+            try {
+                List<String> lines = Files.readAllLines(envPath);
+                for (String rawLine : lines) {
+                    if (rawLine == null) {
+                        continue;
+                    }
+
+                    String line = rawLine.trim();
+                    if (line.isEmpty() || line.startsWith("#")) {
+                        continue;
+                    }
+
+                    int separator = line.indexOf('=');
+                    if (separator <= 0) {
+                        continue;
+                    }
+
+                    String key = line.substring(0, separator).trim();
+                    String value = line.substring(separator + 1).trim();
+                    if (!key.isEmpty()) {
+                        values.put(key, value);
+                    }
+                }
+            } catch (IOException ignored) {
+                return Collections.emptyMap();
+            }
         }
 
-        return values;
+        return values.isEmpty() ? Collections.emptyMap() : values;
     }
 
     private static String normalizeValue(String value) {

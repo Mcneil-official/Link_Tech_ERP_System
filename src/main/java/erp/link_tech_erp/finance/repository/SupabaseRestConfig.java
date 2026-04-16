@@ -118,10 +118,12 @@ public class SupabaseRestConfig {
 
     private static List<Path> envFileCandidates() {
         List<Path> candidates = new ArrayList<>();
+        candidates.add(Paths.get(".env"));
         candidates.add(Paths.get(".env.local"));
 
         String appData = System.getenv("APPDATA");
         if (!isBlank(appData)) {
+            candidates.add(Paths.get(appData, "LinkTechERP", ".env"));
             candidates.add(Paths.get(appData, "LinkTechERP", ".env.local"));
         }
 

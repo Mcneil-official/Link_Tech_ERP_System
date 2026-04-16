@@ -265,7 +265,7 @@ public class ErpShellFrame extends JFrame {
                     String details = String.join("\n- ", configIssues);
                     throw new IllegalStateException(
                         "Module cannot start because required configuration is missing:\n\n- " + details
-                            + "\n\nSet these in environment variables or .env.local in the project root."
+                            + "\n\nSet these in environment variables, .env.local, or .env in the project root."
                     );
                 }
                 authorizationService.requireAccess(moduleToLaunch.getAccess());

@@ -204,40 +204,41 @@ public class DatabaseConnection {
     }
 
     private static Map<String, String> loadEnvFileValues() {
-        Path envPath = Paths.get(".env.local");
-        if (!Files.exists(envPath)) {
-            return Collections.emptyMap();
-        }
-
         Map<String, String> values = new HashMap<>();
-        try {
-            List<String> lines = Files.readAllLines(envPath);
-            for (String rawLine : lines) {
-                if (rawLine == null) {
-                    continue;
-                }
-
-                String line = rawLine.trim();
-                if (line.isEmpty() || line.startsWith("#")) {
-                    continue;
-                }
-
-                int separator = line.indexOf('=');
-                if (separator <= 0) {
-                    continue;
-                }
-
-                String envKey = line.substring(0, separator).trim();
-                String value = line.substring(separator + 1).trim();
-                if (!envKey.isEmpty()) {
-                    values.put(envKey, value);
-                }
+        for (Path envPath : List.of(Paths.get(".env"), Paths.get(".env.local"))) {
+            if (!Files.exists(envPath)) {
+                continue;
             }
-        } catch (IOException ignored) {
-            return Collections.emptyMap();
+
+            try {
+                List<String> lines = Files.readAllLines(envPath);
+                for (String rawLine : lines) {
+                    if (rawLine == null) {
+                        continue;
+                    }
+
+                    String line = rawLine.trim();
+                    if (line.isEmpty() || line.startsWith("#")) {
+                        continue;
+                    }
+
+                    int separator = line.indexOf('=');
+                    if (separator <= 0) {
+                        continue;
+                    }
+
+                    String envKey = line.substring(0, separator).trim();
+                    String value = line.substring(separator + 1).trim();
+                    if (!envKey.isEmpty()) {
+                        values.put(envKey, value);
+                    }
+                }
+            } catch (IOException ignored) {
+                return Collections.emptyMap();
+            }
         }
 
-        return values;
+        return values.isEmpty() ? Collections.emptyMap() : values;
     }
 
     private static String normalizeValue(String value) {
