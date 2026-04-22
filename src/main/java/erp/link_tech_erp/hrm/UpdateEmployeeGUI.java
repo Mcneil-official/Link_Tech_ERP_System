@@ -1,8 +1,14 @@
 package erp.link_tech_erp.hrm;
 
-import java.util.ArrayList;
-import javax.swing.*;
-import java.awt.*;
+import java.awt.Color;
+import java.awt.Font;
+
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
 
 public class UpdateEmployeeGUI {
     public UpdateEmployeeGUI(){
@@ -62,9 +68,12 @@ public class UpdateEmployeeGUI {
         updateBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
         // Add hover effect
         updateBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
             public void mouseEntered(java.awt.event.MouseEvent evt) {
                 updateBtn.setBackground(new Color(0, 102, 204));
             }
+
+            @Override
             public void mouseExited(java.awt.event.MouseEvent evt) {
                 updateBtn.setBackground(new Color(0, 153, 255));
             }
@@ -95,20 +104,20 @@ public class UpdateEmployeeGUI {
 
         updateBtn.addActionListener(e -> {
             String id = idField.getText().trim();
-            ArrayList<String[]> data = DatabaseConnection.loadData();
-            boolean found = false;
-            for (String[] emp : data) {
-                if (emp.length > 0 && emp[0].equals(id)) {
-                    emp[1] = nameField.getText().trim();
-                    emp[2] = posField.getText().trim();
-                    emp[3] = deptField.getText().trim();
-                    emp[4] = salaryField.getText().trim();
-                    found = true;
-                    break;
-                }
+            if (id.isBlank()) {
+                result.setText("Employee ID is required.");
+                return;
             }
-            if (found) {
-                DatabaseConnection.saveData(data);
+
+            boolean updated = DatabaseConnection.updateEmployee(
+                id,
+                nameField.getText().trim(),
+                posField.getText().trim(),
+                deptField.getText().trim(),
+                salaryField.getText().trim()
+            );
+
+            if (updated) {
                 result.setText("Employee updated.");
             } else {
                 result.setText("Employee ID not found.");

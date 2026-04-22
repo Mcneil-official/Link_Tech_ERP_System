@@ -1,8 +1,14 @@
 package erp.link_tech_erp.hrm;
 
-import java.util.*;
-import javax.swing.*;
-import java.awt.*;
+import java.awt.Color;
+import java.awt.Font;
+
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
 
 public class AddEmployeeGUI {
 
@@ -59,9 +65,12 @@ public class AddEmployeeGUI {
         save.setFont(new Font("Segoe UI", Font.BOLD, 12));
         // Add hover effect
         save.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
             public void mouseEntered(java.awt.event.MouseEvent evt) {
                 save.setBackground(new Color(0, 102, 204));
             }
+
+            @Override
             public void mouseExited(java.awt.event.MouseEvent evt) {
                 save.setBackground(new Color(0, 153, 255));
             }
@@ -87,30 +96,11 @@ public class AddEmployeeGUI {
                 return;
             }
 
-            ArrayList<String[]> data = DatabaseConnection.loadData();
-
-            for (String[] row : data) {
-                if (row.length >= 2) {
-                    if (row[0].trim().equalsIgnoreCase(newId)) {
-                        JOptionPane.showMessageDialog(frame, "Employee ID already exists", "Validation Error", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    if (row[1].trim().equalsIgnoreCase(newName)) {
-                        JOptionPane.showMessageDialog(frame, "Employee Name already exists", "Validation Error", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                }
+            boolean created = DatabaseConnection.createEmployee(newId, newName, newPosition, newDept, newSalary);
+            if (!created) {
+                JOptionPane.showMessageDialog(frame, "Employee ID already exists or save failed", "Validation Error", JOptionPane.WARNING_MESSAGE);
+                return;
             }
-
-            data.add(new String[]{
-                    newId,
-                    newName,
-                    newPosition,
-                    newDept,
-                    newSalary
-            });
-
-            DatabaseConnection.saveData(data);
 
             id.setText("");
             name.setText("");

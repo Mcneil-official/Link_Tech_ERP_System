@@ -2,6 +2,8 @@ package erp.link_tech_erp.inventory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -32,6 +34,22 @@ public class ProductRepository {
         }
 
         return products;
+    }
+
+    public Optional<Product> findByName(String productName) {
+        if (productName == null || productName.isBlank()) {
+            return Optional.empty();
+        }
+
+        String normalizedTarget = productName.trim().toLowerCase(Locale.ROOT);
+        for (Product product : findAll()) {
+            if (product != null && product.getName() != null
+                    && product.getName().trim().toLowerCase(Locale.ROOT).equals(normalizedTarget)) {
+                return Optional.of(product);
+            }
+        }
+
+        return Optional.empty();
     }
 
     public Product insert(Product product) {

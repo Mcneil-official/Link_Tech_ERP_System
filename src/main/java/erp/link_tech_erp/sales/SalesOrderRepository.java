@@ -2,6 +2,7 @@ package erp.link_tech_erp.sales;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,6 +39,14 @@ public final class SalesOrderRepository {
         String path = "/orders?select=" + SELECT_FIELDS + "&order=order_id.desc&limit=" + safeLimit;
         JsonNode root = restClient.get(path);
         return mapOrders(root);
+    }
+
+    public Optional<SalesOrder> findById(int orderId) {
+        JsonNode root = restClient.get("/orders?select=" + SELECT_FIELDS + "&order_id=eq." + orderId + "&limit=1");
+        if (root.isArray() && root.size() > 0) {
+            return Optional.of(SalesOrder.fromJson(root.get(0)));
+        }
+        return Optional.empty();
     }
 
     public void createOrder(

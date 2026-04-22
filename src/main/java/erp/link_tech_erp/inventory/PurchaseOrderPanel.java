@@ -1,14 +1,36 @@
 package erp.link_tech_erp.inventory;
 
-import javax.swing.*;
-import javax.swing.border.*;
-import javax.swing.table.*;
-import java.awt.*;
-import java.awt.event.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.GridLayout;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
+
+import erp.link_tech_erp.integration.ProcurementFinanceExpenseSyncService;
 
 public class PurchaseOrderPanel extends JPanel {
 
@@ -21,6 +43,7 @@ public class PurchaseOrderPanel extends JPanel {
     private List<PurchaseOrder> filteredOrders;
     private final PurchaseOrderRepository orderRepository = new PurchaseOrderRepository();
     private final SupplierRepository supplierRepository = new SupplierRepository();
+    private ProcurementFinanceExpenseSyncService procurementFinanceExpenseSyncService;
 
     public PurchaseOrderPanel() {
         setBackground(AppColors.PAGE_BG);
@@ -304,7 +327,8 @@ public class PurchaseOrderPanel extends JPanel {
             double price = Double.parseDouble(tfUnitPrice.getText().trim());
             PurchaseOrder o = new PurchaseOrder(0, supplier,
                 qty, price, (String) cbStatus.getSelectedItem(), LocalDate.now());
-            orderRepository.insert(o);
+            PurchaseOrder savedOrder = orderRepository.insert(o);
+            syncConfirmedPurchaseOrderExpense(savedOrder);
             orders = loadOrdersFromDatabase();
             clearForm();
             refreshTable();
@@ -332,6 +356,7 @@ public class PurchaseOrderPanel extends JPanel {
             o.setUnitPrice(Double.parseDouble(tfUnitPrice.getText().trim()));
             o.setStatus((String) cbStatus.getSelectedItem());
             orderRepository.update(o);
+            syncConfirmedPurchaseOrderExpense(o);
             orders = loadOrdersFromDatabase();
             refreshTable();
             clearForm();
@@ -420,6 +445,31 @@ public class PurchaseOrderPanel extends JPanel {
             .filter(o -> !o.getStatus().equals("Delivered"))
             .mapToDouble(o -> o.getQuantity() * o.getUnitPrice())
             .sum();
+    }
+
+    private void syncConfirmedPurchaseOrderExpense(PurchaseOrder order) {
+        if (order == null || !"Confirmed".equalsIgnoreCase(order.getStatus())) {
+            return;
+        }
+
+        try {
+            getProcurementFinanceExpenseSyncService().syncConfirmedPurchaseOrder(
+                order.getOrderId(),
+                order.getSupplier(),
+                order.getQuantity(),
+                order.getUnitPrice(),
+                order.getOrderDate()
+            );
+        } catch (RuntimeException ex) {
+            showError("Order was saved, but finance expense sync failed: " + ex.getMessage());
+        }
+    }
+
+    private ProcurementFinanceExpenseSyncService getProcurementFinanceExpenseSyncService() {
+        if (procurementFinanceExpenseSyncService == null) {
+            procurementFinanceExpenseSyncService = ProcurementFinanceExpenseSyncService.createDefault();
+        }
+        return procurementFinanceExpenseSyncService;
     }
 
     private void showError(String msg) {

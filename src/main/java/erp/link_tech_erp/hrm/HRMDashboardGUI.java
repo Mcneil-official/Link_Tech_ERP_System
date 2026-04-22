@@ -65,9 +65,12 @@ public class HRMDashboardGUI {
             btn.setFont(new Font("Segoe UI", Font.BOLD, 12));
             // Add hover effect
             btn.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
                     ((JButton)evt.getSource()).setBackground(new Color(0, 102, 204));
                 }
+
+                @Override
                 public void mouseExited(java.awt.event.MouseEvent evt) {
                     ((JButton)evt.getSource()).setBackground(new Color(0, 153, 255));
                 }
@@ -75,9 +78,12 @@ public class HRMDashboardGUI {
         }
         btnDelete.setBackground(new Color(255, 51, 51));
         btnDelete.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
             public void mouseEntered(java.awt.event.MouseEvent evt) {
                 btnDelete.setBackground(new Color(204, 0, 0));
             }
+
+            @Override
             public void mouseExited(java.awt.event.MouseEvent evt) {
                 btnDelete.setBackground(new Color(255, 51, 51));
             }
@@ -134,10 +140,8 @@ public class HRMDashboardGUI {
         String salary = prompt("Enter Salary:");
         if(salary == null || salary.isBlank()) return;
 
-        ArrayList<String[]> employees = DatabaseConnection.loadData();
-        employees.add(new String[]{id, name, position, department, salary});
-        DatabaseConnection.saveData(employees);
-        showMessage("Employee added successfully.");
+        boolean created = DatabaseConnection.createEmployee(id, name, position, department, salary);
+        showMessage(created ? "Employee added successfully." : "Employee ID already exists or save failed.");
         viewEmployees();
     }
 
@@ -161,42 +165,29 @@ public class HRMDashboardGUI {
         String id = prompt("Enter Employee ID to update:");
         if(id == null || id.isBlank()) return;
 
-        ArrayList<String[]> employees = DatabaseConnection.loadData();
-        for (String[] emp : employees) {
-            if (emp[0].equals(id)) {
-                String name = prompt("New Name:", emp[1]);
-                String position = prompt("New Position:", emp[2]);
-                String department = prompt("New Department:", emp[3]);
-                String salary = prompt("New Salary:", emp[4]);
-                if(name == null || position == null || department == null || salary == null) return;
-                emp[1] = name;
-                emp[2] = position;
-                emp[3] = department;
-                emp[4] = salary;
-                DatabaseConnection.saveData(employees);
-                showMessage("Employee updated.");
-                viewEmployees();
-                return;
-            }
+        String[] employee = DatabaseConnection.getEmployeeById(id);
+        if (employee == null) {
+            showMessage("Employee not found.");
+            return;
         }
-        showMessage("Employee not found.");
+
+        String name = prompt("New Name:", employee[1]);
+        String position = prompt("New Position:", employee[2]);
+        String department = prompt("New Department:", employee[3]);
+        String salary = prompt("New Salary:", employee[4]);
+        if(name == null || position == null || department == null || salary == null) return;
+
+        boolean updated = DatabaseConnection.updateEmployee(id, name, position, department, salary);
+        showMessage(updated ? "Employee updated." : "Employee not found.");
+        viewEmployees();
     }
 
     private void deleteEmployee() {
         String id = prompt("Enter Employee ID to delete:");
         if(id == null || id.isBlank()) return;
 
-        ArrayList<String[]> employees = DatabaseConnection.loadData();
-        boolean found = false;
-        for (int i = 0; i < employees.size(); i++) {
-            if (employees.get(i)[0].equals(id)) {
-                employees.remove(i);
-                found = true;
-                break;
-            }
-        }
-        if (found) {
-            DatabaseConnection.saveData(employees);
+        boolean deleted = DatabaseConnection.deleteEmployee(id);
+        if (deleted) {
             showMessage("Employee deleted.");
             viewEmployees();
         } else {
@@ -208,18 +199,16 @@ public class HRMDashboardGUI {
         String name = prompt("Enter employee name to search:");
         if(name == null || name.isBlank()) return;
 
-        ArrayList<String[]> employees = DatabaseConnection.loadData();
+        ArrayList<String[]> employees = DatabaseConnection.searchByName(name.trim());
         StringBuilder sb = new StringBuilder();
         for (String[] emp : employees) {
-            if (emp.length < 2) continue;
-            if (emp[1].equalsIgnoreCase(name.trim())) {
-                sb.append("ID: ").append(emp[0]).append("\n");
-                sb.append("Name: ").append(emp[1]).append("\n");
-                sb.append("Position: ").append(emp[2]).append("\n");
-                sb.append("Department: ").append(emp[3]).append("\n");
-                sb.append("Salary: ").append(emp[4]).append("\n");
-                sb.append("---------------------\n");
-            }
+            if (emp.length < 5) continue;
+            sb.append("ID: ").append(emp[0]).append("\n");
+            sb.append("Name: ").append(emp[1]).append("\n");
+            sb.append("Position: ").append(emp[2]).append("\n");
+            sb.append("Department: ").append(emp[3]).append("\n");
+            sb.append("Salary: ").append(emp[4]).append("\n");
+            sb.append("---------------------\n");
         }
         if (sb.length() == 0) {
             showMessage("No employee found with name: " + name);

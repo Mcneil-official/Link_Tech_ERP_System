@@ -10,11 +10,13 @@ import erp.link_tech_erp.finance.model.Payment;
 import erp.link_tech_erp.finance.model.PaymentType;
 import erp.link_tech_erp.finance.repository.BillRepository;
 import erp.link_tech_erp.finance.repository.PaymentRepository;
+import erp.link_tech_erp.integration.ProcurementFinanceExpenseSyncService;
 
 public class AccountsPayableService {
     private final BillRepository billRepository;
     private final PaymentRepository paymentRepository;
     private final ComplianceService complianceService;
+    private ProcurementFinanceExpenseSyncService procurementFinanceExpenseSyncService;
 
     public AccountsPayableService(BillRepository billRepository,
                                   PaymentRepository paymentRepository,
@@ -82,6 +84,7 @@ public class AccountsPayableService {
 
         boolean updated = billRepository.updatePayment(billId, newPaidAmount, newStatus);
         if (updated) {
+            getProcurementFinanceExpenseSyncService().syncSupplierDisbursement(bill, payment);
             complianceService.logAudit(
                     "payments",
                     payment.getId(),
@@ -144,5 +147,12 @@ public class AccountsPayableService {
             return "";
         }
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private ProcurementFinanceExpenseSyncService getProcurementFinanceExpenseSyncService() {
+        if (procurementFinanceExpenseSyncService == null) {
+            procurementFinanceExpenseSyncService = ProcurementFinanceExpenseSyncService.createDefault();
+        }
+        return procurementFinanceExpenseSyncService;
     }
 }

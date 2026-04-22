@@ -35,9 +35,16 @@ import javax.swing.RowFilter;
 import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.border.TitledBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
+
+import erp.link_tech_erp.integration.HrmSalesDeliveryPerformanceSyncService;
+import erp.link_tech_erp.integration.InventorySalesOrderService;
+import erp.link_tech_erp.integration.InventorySalesOrderService.QuotedOrder;
+import erp.link_tech_erp.integration.SalesFinanceRevenueSyncService;
 
 /**
  * Main GUI Application for Admin Sales and Delivery System
@@ -47,6 +54,9 @@ public class MainApp extends JFrame {
     
     // Sales data repository (Supabase REST)
     private final SalesOrderRepository orderRepository;
+    private final InventorySalesOrderService inventorySalesOrderService;
+    private final SalesFinanceRevenueSyncService salesFinanceRevenueSyncService;
+    private final HrmSalesDeliveryPerformanceSyncService hrmSalesDeliveryPerformanceSyncService;
     
     // Formatter for currency with commas
     private final DecimalFormat currencyFormatter = new DecimalFormat("₱#,##0.00");
@@ -101,6 +111,9 @@ public class MainApp extends JFrame {
         // Initialize Supabase REST repository
         try {
             orderRepository = new SalesOrderRepository();
+            inventorySalesOrderService = new InventorySalesOrderService();
+            salesFinanceRevenueSyncService = SalesFinanceRevenueSyncService.createDefault();
+            hrmSalesDeliveryPerformanceSyncService = HrmSalesDeliveryPerformanceSyncService.createDefault();
         } catch (RuntimeException e) {
             JOptionPane.showMessageDialog(
                 this,
@@ -349,7 +362,27 @@ public class MainApp extends JFrame {
         gbc.gridx = 1; gbc.gridy = 3; gbc.gridwidth = 2;
         txtTotalPrice = new JTextField(20);
         txtTotalPrice.setFont(new Font("Arial", Font.PLAIN, 14));
+        txtTotalPrice.setEditable(false);
         inputPanel.add(txtTotalPrice, gbc);
+
+        DocumentListener priceQuoteListener = new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent event) {
+                refreshQuotedTotalPrice();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent event) {
+                refreshQuotedTotalPrice();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent event) {
+                refreshQuotedTotalPrice();
+            }
+        };
+        txtProduct.getDocument().addDocumentListener(priceQuoteListener);
+        txtQuantity.getDocument().addDocumentListener(priceQuoteListener);
         
         // Payment Status
         gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1;
@@ -763,11 +796,15 @@ public class MainApp extends JFrame {
         }
 
         try {
+            int quantity = Integer.parseInt(txtQuantity.getText().trim());
+            QuotedOrder quotedOrder = inventorySalesOrderService.quoteOrder(txtProduct.getText().trim(), quantity);
+            txtTotalPrice.setText(currencyFormatter.format(quotedOrder.totalPrice()));
+
             orderRepository.createOrder(
                 txtCustomerName.getText().trim(),
-                txtProduct.getText().trim(),
-                Integer.parseInt(txtQuantity.getText().trim()),
-                Double.parseDouble(txtTotalPrice.getText().trim()),
+                quotedOrder.productName(),
+                quotedOrder.quantity(),
+                quotedOrder.totalPrice(),
                 paymentStatus,
                 deliveryStatus
             );
@@ -790,8 +827,7 @@ public class MainApp extends JFrame {
     private boolean validateSaleInput() {
         if (txtCustomerName.getText().trim().isEmpty() ||
             txtProduct.getText().trim().isEmpty() ||
-            txtQuantity.getText().trim().isEmpty() ||
-            txtTotalPrice.getText().trim().isEmpty()) {
+            txtQuantity.getText().trim().isEmpty()) {
 
             showError("Please fill in all fields!");
             return false;
@@ -803,18 +839,30 @@ public class MainApp extends JFrame {
                 showError("Quantity must be greater than 0!");
                 return false;
             }
-            
-            double totalPrice = Double.parseDouble(txtTotalPrice.getText().trim());
-            if (totalPrice <= 0) {
-                showError("Total price must be greater than 0!");
-                return false;
-            }
         } catch (NumberFormatException e) {
-            showError("Please enter valid numbers for Quantity and Total Price!");
+            showError("Please enter a valid number for Quantity!");
             return false;
         }
 
         return true;
+    }
+
+    private void refreshQuotedTotalPrice() {
+        String productName = txtProduct.getText().trim();
+        String quantityText = txtQuantity.getText().trim();
+
+        if (productName.isEmpty() || quantityText.isEmpty()) {
+            txtTotalPrice.setText("");
+            return;
+        }
+
+        try {
+            int quantity = Integer.parseInt(quantityText);
+            QuotedOrder quotedOrder = inventorySalesOrderService.quoteOrder(productName, quantity);
+            txtTotalPrice.setText(currencyFormatter.format(quotedOrder.totalPrice()));
+        } catch (RuntimeException exception) {
+            txtTotalPrice.setText("");
+        }
     }
     
     /**
@@ -1003,6 +1051,23 @@ public class MainApp extends JFrame {
             }
 
             if (orderRepository.updateDeliveryStatus(orderId, status)) {
+                // Sync delivery outcome to HRM if marked as Delivered
+                if ("Delivered".equalsIgnoreCase(status)) {
+                    try {
+                        // For now, sync with default employee and on-time tracking
+                        // In a full implementation, this would come from UI selection
+                        hrmSalesDeliveryPerformanceSyncService.syncDeliveredOutcome(
+                            orderId, "delivery-staff-default", true, 4.5);
+                    } catch (RuntimeException syncException) {
+                        JOptionPane.showMessageDialog(
+                            this,
+                            "Delivery was marked, but HRM sync failed:\n" + syncException.getMessage(),
+                            "HRM Sync Warning",
+                            JOptionPane.WARNING_MESSAGE
+                        );
+                    }
+                }
+
                 JOptionPane.showMessageDialog(this,
                     "✅ Order #" + orderId + " marked as " + status + "!",
                     "Success",
@@ -1024,6 +1089,19 @@ public class MainApp extends JFrame {
     private void updatePaymentStatus(int orderId, String status) {
         try {
             if (orderRepository.updatePaymentStatus(orderId, status)) {
+                if ("Paid".equalsIgnoreCase(status)) {
+                    try {
+                        salesFinanceRevenueSyncService.syncPaidOrderRevenue(orderId);
+                    } catch (RuntimeException syncException) {
+                        JOptionPane.showMessageDialog(
+                            this,
+                            "Payment was updated, but finance sync failed:\n" + syncException.getMessage(),
+                            "Finance Sync Warning",
+                            JOptionPane.WARNING_MESSAGE
+                        );
+                    }
+                }
+
                 JOptionPane.showMessageDialog(this,
                     "✅ Order #" + orderId + " marked as " + status + "!",
                     "Success",

@@ -1,8 +1,14 @@
 package erp.link_tech_erp.hrm;
 
-import java.util.ArrayList;
-import javax.swing.*;
-import java.awt.*;
+import java.awt.Color;
+import java.awt.Font;
+
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
 
 public class DeleteEmployeeGUI {
 
@@ -42,9 +48,12 @@ public class DeleteEmployeeGUI {
         delete.setFont(new Font("Segoe UI", Font.BOLD, 12));
         // Add hover effect
         delete.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
             public void mouseEntered(java.awt.event.MouseEvent evt) {
                 delete.setBackground(new Color(204, 0, 0));
             }
+
+            @Override
             public void mouseExited(java.awt.event.MouseEvent evt) {
                 delete.setBackground(new Color(255, 51, 51));
             }
@@ -66,20 +75,15 @@ public class DeleteEmployeeGUI {
         frame.setVisible(true);
 
         delete.addActionListener(e -> {
-            ArrayList<String[]> data = DatabaseConnection.loadData();
             String id = idField.getText().trim();
-            boolean deleted = false;
-
-            for(int i=0;i<data.size();i++){
-                if(data.get(i).length > 0 && data.get(i)[0].equals(id)){
-                    data.remove(i);
-                    deleted = true;
-                    break;
-                }
+            if (id.isBlank()) {
+                result.setText("Employee ID is required.");
+                return;
             }
 
+            boolean deleted = DatabaseConnection.deleteEmployee(id);
+
             if(deleted){
-                DatabaseConnection.saveData(data);
                 result.setText("Employee deleted.");
             } else {
                 result.setText("Employee ID not found.");

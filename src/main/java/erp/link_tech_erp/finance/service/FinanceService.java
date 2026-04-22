@@ -30,7 +30,9 @@ public class FinanceService {
     public FinancialRecord createRecord(FinancialRecord record) {
         complianceService.assertCanMutate("CREATE_FINANCIAL_RECORD", record.getDate(), record.getAmount(), null,
             "Create financial record");
-        record.setId(UUID.randomUUID().toString());
+        if (record.getId() == null || record.getId().isBlank()) {
+            record.setId(UUID.randomUUID().toString());
+        }
         repository.insert(record);
         complianceService.logAudit(
             "financial_records",
@@ -39,6 +41,25 @@ public class FinanceService {
             null,
             toJson(record),
             "Financial record created");
+        return record;
+    }
+
+    public FinancialRecord upsertRecord(FinancialRecord record) {
+        if (record == null) {
+            throw new IllegalArgumentException("Financial record is required.");
+        }
+
+        if (record.getId() == null || record.getId().isBlank()) {
+            return createRecord(record);
+        }
+
+        Optional<FinancialRecord> existing = repository.findById(record.getId());
+        if (existing.isPresent()) {
+            updateRecord(record);
+            return record;
+        }
+
+        createRecord(record);
         return record;
     }
 

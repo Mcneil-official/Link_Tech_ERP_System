@@ -17,13 +17,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import erp.link_tech_erp.integration.HrmFinanceSalarySyncService;
+
 public class DatabaseConnection {
 
-    private static final String TABLE = "hrm_employees";
-    private static final String SELECT_FIELDS = "employee_id,name,position,department,salary";
+    private static final String TABLE = "employees";
+    private static final String SELECT_FIELDS = "id,name,position,department,salary";
     private static final Map<String, String> ENV_FILE_VALUES = loadEnvFileValues();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
@@ -33,11 +36,11 @@ public class DatabaseConnection {
         ArrayList<String[]> list = new ArrayList<>();
         try {
 
-            JsonNode root = get("/" + TABLE + "?select=" + SELECT_FIELDS + "&order=employee_id.asc");
+            JsonNode root = get("/" + TABLE + "?select=" + SELECT_FIELDS + "&order=id.asc");
             if (root.isArray()) {
                 for (JsonNode node : root) {
                     list.add(new String[] {
-                        node.path("employee_id").asText(""),
+                        node.path("id").asText(""),
                         node.path("name").asText(""),
                         node.path("position").asText(""),
                         node.path("department").asText(""),
@@ -52,28 +55,157 @@ public class DatabaseConnection {
         return list;
     }
 
-    public static void saveData(ArrayList<String[]> list) {
-        try {
-            // Keep legacy behavior (entire dataset overwrite) while storing in Supabase.
-            delete("/" + TABLE + "?employee_id=neq." + enc("__never__"), false);
+    public static boolean createEmployee(String id, String name, String position, String department, String salary) {
+        if (isBlank(id) || isBlank(name)) {
+            return false;
+        }
 
-            List<Map<String, String>> payloadRows = new ArrayList<>();
-            for (String[] emp : list) {
-                if (emp == null || emp.length < 5) {
-                    continue;
-                }
-                Map<String, String> row = new HashMap<>();
-                row.put("employee_id", safe(emp[0]));
-                row.put("name", safe(emp[1]));
-                row.put("position", safe(emp[2]));
-                row.put("department", safe(emp[3]));
-                row.put("salary", safe(emp[4]));
-                payloadRows.add(row);
+        try {
+            if (getEmployeeById(id) != null) {
+                return false;
             }
 
-            if (!payloadRows.isEmpty()) {
-                String payload = OBJECT_MAPPER.writeValueAsString(payloadRows);
-                post(TABLE, payload, false);
+            Map<String, String> row = new HashMap<>();
+            row.put("id", safe(id));
+            row.put("name", safe(name));
+            row.put("position", safe(position));
+            row.put("department", safe(department));
+            row.put("salary", safe(salary));
+
+            String payload = OBJECT_MAPPER.writeValueAsString(row);
+            post(TABLE, payload, false);
+            syncSalaryToFinance(id);
+            return true;
+        } catch (JsonProcessingException | RuntimeException exception) {
+            System.err.println("Failed to create employee: " + exception.getMessage());
+            return false;
+        }
+    }
+
+    public static boolean updateEmployee(String id, String name, String position, String department, String salary) {
+        if (isBlank(id)) {
+            return false;
+        }
+
+        try {
+            Map<String, String> updates = new HashMap<>();
+            updates.put("name", safe(name));
+            updates.put("position", safe(position));
+            updates.put("department", safe(department));
+            updates.put("salary", safe(salary));
+
+            String payload = OBJECT_MAPPER.writeValueAsString(updates);
+            JsonNode response = patch("/" + TABLE + "?id=eq." + enc(id), payload, true);
+            if (response.isArray() && !response.isEmpty()) {
+                syncSalaryToFinance(id);
+            }
+            return response.isArray() && !response.isEmpty();
+        } catch (JsonProcessingException | RuntimeException exception) {
+            System.err.println("Failed to update employee: " + exception.getMessage());
+            return false;
+        }
+    }
+
+    public static boolean deleteEmployee(String id) {
+        if (isBlank(id)) {
+            return false;
+        }
+
+        try {
+            JsonNode response = delete("/" + TABLE + "?id=eq." + enc(id), true);
+            return response.isArray() && !response.isEmpty();
+        } catch (Exception exception) {
+            System.err.println("Failed to delete employee: " + exception.getMessage());
+            return false;
+        }
+    }
+
+    public static ArrayList<String[]> searchByName(String name) {
+        ArrayList<String[]> list = new ArrayList<>();
+        if (isBlank(name)) {
+            return list;
+        }
+
+        try {
+            String query = "/" + TABLE + "?select=" + SELECT_FIELDS + "&name=ilike.*" + enc(name.trim()) + "*&order=id.asc";
+            JsonNode root = get(query);
+            if (root.isArray()) {
+                for (JsonNode node : root) {
+                    list.add(new String[] {
+                        node.path("id").asText(""),
+                        node.path("name").asText(""),
+                        node.path("position").asText(""),
+                        node.path("department").asText(""),
+                        node.path("salary").asText("")
+                    });
+                }
+            }
+        } catch (Exception exception) {
+            System.err.println("Failed to search employees: " + exception.getMessage());
+        }
+
+        return list;
+    }
+
+    public static String[] getEmployeeById(String id) {
+        if (isBlank(id)) {
+            return null;
+        }
+
+        try {
+            JsonNode root = get("/" + TABLE + "?select=" + SELECT_FIELDS + "&id=eq." + enc(id) + "&limit=1");
+            if (!root.isArray() || root.isEmpty()) {
+                return null;
+            }
+
+            JsonNode node = root.get(0);
+            return new String[] {
+                node.path("id").asText(""),
+                node.path("name").asText(""),
+                node.path("position").asText(""),
+                node.path("department").asText(""),
+                node.path("salary").asText("")
+            };
+        } catch (Exception exception) {
+            System.err.println("Failed to load employee by id: " + exception.getMessage());
+            return null;
+        }
+    }
+
+    public static void saveData(ArrayList<String[]> list) {
+        // Legacy compatibility method. Prefer createEmployee/updateEmployee/deleteEmployee.
+        try {
+            List<String[]> existing = loadData();
+            Map<String, String[]> existingById = new HashMap<>();
+            for (String[] row : existing) {
+                if (row != null && row.length >= 5 && !isBlank(row[0])) {
+                    existingById.put(row[0], row);
+                }
+            }
+
+            Map<String, String[]> incomingById = new HashMap<>();
+            for (String[] row : list) {
+                if (row == null || row.length < 5 || isBlank(row[0])) {
+                    continue;
+                }
+                incomingById.put(row[0], row);
+            }
+
+            for (String id : existingById.keySet()) {
+                if (!incomingById.containsKey(id)) {
+                    deleteEmployee(id);
+                }
+            }
+
+            for (Map.Entry<String, String[]> entry : incomingById.entrySet()) {
+                String id = entry.getKey();
+                String[] row = entry.getValue();
+
+                if (!existingById.containsKey(id)) {
+                    createEmployee(row[0], row[1], row[2], row[3], row[4]);
+                } else {
+                    updateEmployee(row[0], row[1], row[2], row[3], row[4]);
+                }
             }
         } catch (Exception e) {
             System.err.println("Failed to save employee data: " + e.getMessage());
@@ -106,6 +238,16 @@ public class DatabaseConnection {
             .build();
         String body = send(request, "Supabase DELETE failed");
         return body == null || body.isBlank() ? OBJECT_MAPPER.createArrayNode() : parse(body, "Supabase DELETE returned invalid JSON");
+    }
+
+    private static JsonNode patch(String pathAndQuery, String payload, boolean returnRepresentation) {
+        HttpRequest request = baseRequest(pathAndQuery)
+            .header("Content-Type", "application/json")
+            .header("Prefer", returnRepresentation ? "return=representation" : "return=minimal")
+            .method("PATCH", HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+            .build();
+        String body = send(request, "Supabase PATCH failed");
+        return body == null || body.isBlank() ? OBJECT_MAPPER.createArrayNode() : parse(body, "Supabase PATCH returned invalid JSON");
     }
 
     private static HttpRequest.Builder baseRequest(String pathAndQuery) {
@@ -151,6 +293,9 @@ public class DatabaseConnection {
         String baseUrl;
         if (!isBlank(explicitRestUrl)) {
             baseUrl = trimTrailingSlash(explicitRestUrl);
+            if (!baseUrl.endsWith("/rest/v1")) {
+                baseUrl = baseUrl + "/rest/v1";
+            }
         } else if (!isBlank(projectUrl)) {
             baseUrl = trimTrailingSlash(projectUrl) + "/rest/v1";
         } else {
@@ -239,6 +384,15 @@ public class DatabaseConnection {
         }
 
         return values.isEmpty() ? Collections.emptyMap() : values;
+    }
+
+    private static void syncSalaryToFinance(String employeeId) {
+        try {
+            HrmFinanceSalarySyncService.createDefault().syncEmployeeSalary(employeeId);
+        } catch (Exception exception) {
+            System.err.println("[HRM] Salary sync to Finance failed for employee " + employeeId + ": "
+                    + exception.getMessage());
+        }
     }
 
     private static String normalizeValue(String value) {
